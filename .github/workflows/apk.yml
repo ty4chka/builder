@@ -1,0 +1,63 @@
+name: APK Builder
+
+"on":
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: "Git repo URL (https://... or owner/repo)"
+        required: true
+      build_cmd:
+        description: "Build command (default: ./gradlew assembleRelease)"
+        required: false
+        default: "./gradlew assembleRelease"
+      apk_glob:
+        description: "Glob for APK files"
+        required: false
+        default: "**/*.apk"
+      release_tag:
+        description: "Release tag"
+        required: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Clone target repo
+        run: |
+          input="${{ github.event.inputs.repo_url }}"
+          case "$input" in
+            https*|git@*) URL="$input" ;;
+            *) URL="https://github.com/${input}.git" ;;
+          esac
+          git clone --depth 1 "$URL" src
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build APK
+        working-directory: src
+        run: ${{ github.event.inputs.build_cmd }}
+
+      - name: Collect APKs
+        run: |
+          mkdir -p out
+          find src -path "${{ github.event.inputs.apk_glob }}" -exec cp {} out/ \; || true
+          ls -la out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: out/
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          files: out/*
+          fail_on_unmatched_files: false
