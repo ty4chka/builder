@@ -1,19 +1,19 @@
 name: Builder
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       repo_url:
-        description: 'Git repo URL to build (https or shorthand owner/repo)'
+        description: "Git repo URL to build (https://... or owner/repo)"
         required: true
       build_cmd:
-        description: 'Build command (e.g. "go build ./..." or "npm run build")'
+        description: "Build command (shell)"
         required: true
       artifact_glob:
-        description: 'Glob of built files to upload (e.g. "omnirouter*")'
+        description: "Glob of built files (e.g. omnirouter*)"
         required: true
       release_tag:
-        description: 'Tag name for release (e.g. v1.0.0)'
+        description: "Release tag name"
         required: true
 
 jobs:
@@ -28,10 +28,8 @@ jobs:
             goarch: arm64
           - goos: linux
             goarch: amd64
-          - goos: android
-            goarch: arm64
     steps:
-      - name: Checkout target repo
+      - name: Clone target repo
         run: |
           input="${{ github.event.inputs.repo_url }}"
           case "$input" in
@@ -39,36 +37,35 @@ jobs:
             *) URL="https://github.com/${input}.git" ;;
           esac
           git clone --depth 1 "$URL" src
+
       - uses: actions/setup-go@v5
         with:
-          go-version: 'stable'
+          go-version: "stable"
         if: hashFiles('src/go.mod') != ''
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
         if: hashFiles('src/package.json') != ''
+
       - name: Build
         working-directory: src
-        run: |
-          export GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }}
-          ${{ github.event.inputs.build_cmd }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: ${{ github.event.inputs.build_cmd }}
+
       - name: Collect artifacts
         run: |
           mkdir -p out
-          find src -type f \( -name "${{ github.event.inputs.artifact_glob }}" \) -newer src/go.mod -exec mv {} out/ \; 2>/dev/null || true
-          find src -type f -name "${{ github.event.inputs.artifact_glob }}" -exec cp {} out/ \; 2>/dev/null || true
-          for f in out/*; do
-            [ -f "$f" ] || continue
-            case "$f" in
-              *arm64*|*aarch64*) ;;
-              *) mv "$f" "${f}-${{ matrix.goos }}-${{ matrix.goarch }}" 2>/dev/null || true ;;
-            esac
-          done
+          find src -type f -name "${{ github.event.inputs.artifact_glob }}" -exec cp {} out/ \; || true
           ls -la out/
+
       - uses: actions/upload-artifact@v4
         with:
           name: bins-${{ matrix.goos }}-${{ matrix.goarch }}
           path: out/
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
