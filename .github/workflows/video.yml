@@ -24,10 +24,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Install ffmpeg
+      - name: Install ffmpeg + PIL
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
+          sudo apt-get install -y -qq ffmpeg python3-pil
 
       - name: Fetch frames
         run: |
@@ -38,6 +38,12 @@ jobs:
       - name: Build video
         run: |
           cd frames
+          for f in frame_*.png; do
+            python3 -c "
+from PIL import Image
+im = Image.open('$f'); im.thumbnail((1920, 1920)); im.save('$f')
+" || true
+          done
           FPS="${{ github.event.inputs.fps }}"
           FZ="${{ github.event.inputs.freeze_last }}"
           LAST=$(ls frame_*.png | sort | tail -1)
