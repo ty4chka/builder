@@ -24,6 +24,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
       - name: Fetch frames
         run: |
           curl -sL "${{ github.event.inputs.frames_url }}" -o frames.tgz
