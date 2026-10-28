@@ -61,9 +61,12 @@ jobs:
           name: wheels-arm64
           path: wheels/
 
-      - name: Bundle + Release
-        run: |
-          tar czf wheels-${{ github.event.inputs.release_tag }}-aarch64.tar.gz -C wheels .
-          gh release create "${{ github.event.inputs.release_tag }}" wheels-*.tar.gz --title "${{ github.event.inputs.release_tag }}" --notes "wheels for aarch64 (Termux/py3.12): распаковать в общую папку и pip install --no-index --find-links . <pkg>" || gh release upload "${{ github.event.inputs.release_tag }}" wheels-*.tar.gz --clobber
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Bundle
+        run: tar czf wheels-${{ github.event.inputs.release_tag }}-aarch64.tar.gz -C wheels .
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          files: wheels-*.tar.gz
+          fail_on_unmatched_files: false
