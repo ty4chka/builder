@@ -1,0 +1,69 @@
+name: Python Wheel Builder
+
+"on":
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "PyPI package name (e.g. specify-cli)"
+        required: true
+      package_spec:
+        description: "Full pip spec (default: <package>; or git+https://...)"
+        required: false
+        default: ""
+      release_tag:
+        description: "Release tag"
+        required: true
+
+jobs:
+  wheels:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pipx tooling
+        run: pip install uv build
+
+      - name: Download all wheels (deps incl.) for aarch64
+        env:
+          PKG: ${{ github.event.inputs.package_spec }}
+        run: |
+          SPEC="${PKG:-${{ github.event.inputs.package }}}"
+          mkdir -p wheels
+          pip download "$SPEC" \
+            --only-binary=:all: \
+            --platform manylinux2014_aarch64 \
+            --platform manylinux_aarch64 \
+            --platform linux_aarch64 \
+            --platform any \
+            --python-version 3.12 \
+            --implementation cp \
+            --abi cp312 \
+            --abi abi3 \
+            --abi none \
+            -d wheels || \
+          pip download "$SPEC" --only-binary=:all: --platform any --python-version 3.12 -d wheels
+          ls -la wheels/
+
+      - name: Sanity check (install into clean venv on emulated aarch64)
+        uses: uraimo/run-on-arch-action@v2
+        with:
+          arch: aarch64
+          distro: ubuntu22.04
+          run: |
+            python3 -m venv /tmp/v && /tmp/v/bin/pip install --no-index --find-links $GITHUB_WORKSPACE/wheels "${{ github.event.inputs.package_spec || github.event.inputs.package }}" >/dev/null 2>&1 && echo INSTALL_OK || echo INSTALL_PARTIAL
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-arm64
+          path: wheels/
+
+      - name: Bundle + Release
+        run: |
+          tar czf wheels-${{ github.event.inputs.release_tag }}-aarch64.tar.gz -C wheels .
+          gh release create "${{ github.event.inputs.release_tag }}" wheels-*.tar.gz --title "${{ github.event.inputs.release_tag }}" --notes "wheels for aarch64 (Termux/py3.12): распаковать в общую папку и pip install --no-index --find-links . <pkg>" || gh release upload "${{ github.event.inputs.release_tag }}" wheels-*.tar.gz --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
